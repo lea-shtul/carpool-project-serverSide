@@ -19,6 +19,12 @@ public interface IRideRepository
     Task<Ride?> GetDetailedByIdAsync(int id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Read-only load (<c>AsNoTracking</c>), no includes — for existence/ownership checks
+    /// that do not modify the ride, e.g. the driver's "who booked my ride" view (spec §20).
+    /// </summary>
+    Task<Ride?> GetByIdNoTrackingAsync(int id, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Filtered, sorted, database-paged search for <c>GET /api/rides</c>. Paging is
     /// done with <c>Skip</c>/<c>Take</c> in the database and the total count is
     /// returned alongside the page (spec §20, §65).

@@ -120,20 +120,21 @@ public class RideService : IRideService
 
     public async Task<RideResponse> CancelAsync(int rideId, int currentUserId, UserRole currentUserRole, CancellationToken cancellationToken)
     {
-        var ride = await _rideRepository.GetByIdAsync(rideId, cancellationToken)
-            ?? throw new NotFoundException($"Ride {rideId} was not found.");
-
-        EnsureDriverOrAdmin(ride, currentUserId, currentUserRole);
-
-        // Normal cancellation is allowed only while the ride is still Scheduled — not once
-        // it is InProgress (spec §18).
-        if (ride.Status != RideStatus.Scheduled)
-        {
-            throw new BusinessRuleException("Only a scheduled ride can be cancelled.");
-        }
-
+        // Read, authorization, status check and save in ONE transaction (see BookingService).
         await _unitOfWork.ExecuteInTransactionAsync(async token =>
         {
+            var ride = await _rideRepository.GetByIdAsync(rideId, token)
+                ?? throw new NotFoundException($"Ride {rideId} was not found.");
+
+            EnsureDriverOrAdmin(ride, currentUserId, currentUserRole);
+
+            // Normal cancellation is allowed only while the ride is still Scheduled — not once
+            // it is InProgress (spec §18).
+            if (ride.Status != RideStatus.Scheduled)
+            {
+                throw new BusinessRuleException("Only a scheduled ride can be cancelled.");
+            }
+
             var now = DateTime.UtcNow;
             ride.Status = RideStatus.Cancelled;
 
@@ -154,31 +155,32 @@ public class RideService : IRideService
 
     public async Task<RideResponse> CompleteAsync(int rideId, int currentUserId, UserRole currentUserRole, CancellationToken cancellationToken)
     {
-        var ride = await _rideRepository.GetByIdAsync(rideId, cancellationToken)
-            ?? throw new NotFoundException($"Ride {rideId} was not found.");
-
-        EnsureDriverOrAdmin(ride, currentUserId, currentUserRole);
-
-        var now = DateTime.UtcNow;
-
-        // Eligibility (spec §17). A ride that is still Scheduled is acceptable only when its
-        // departure time has already passed — i.e. the BackgroundService simply has not
-        // advanced it to InProgress yet. Completing a ride that has not departed, or one
-        // that is already Completed/Cancelled, is rejected.
-        switch (ride.Status)
-        {
-            case RideStatus.InProgress:
-                break;
-            case RideStatus.Scheduled when ride.DepartureTime <= now:
-                break;
-            case RideStatus.Scheduled:
-                throw new BusinessRuleException("The ride has not departed yet and cannot be completed.");
-            default:
-                throw new BusinessRuleException($"A {ride.Status.ToString().ToLowerInvariant()} ride cannot be completed.");
-        }
-
+        // Read, authorization, eligibility check and save in ONE transaction (see BookingService).
         await _unitOfWork.ExecuteInTransactionAsync(async token =>
         {
+            var ride = await _rideRepository.GetByIdAsync(rideId, token)
+                ?? throw new NotFoundException($"Ride {rideId} was not found.");
+
+            EnsureDriverOrAdmin(ride, currentUserId, currentUserRole);
+
+            var now = DateTime.UtcNow;
+
+            // Eligibility (spec §17). A ride that is still Scheduled is acceptable only when its
+            // departure time has already passed — i.e. the BackgroundService simply has not
+            // advanced it to InProgress yet. Completing a ride that has not departed, or one
+            // that is already Completed/Cancelled, is rejected.
+            switch (ride.Status)
+            {
+                case RideStatus.InProgress:
+                    break;
+                case RideStatus.Scheduled when ride.DepartureTime <= now:
+                    break;
+                case RideStatus.Scheduled:
+                    throw new BusinessRuleException("The ride has not departed yet and cannot be completed.");
+                default:
+                    throw new BusinessRuleException($"A {ride.Status.ToString().ToLowerInvariant()} ride cannot be completed.");
+            }
+
             ride.Status = RideStatus.Completed;
             ride.CompletedAt = now;
             ride.StartedAt ??= now;

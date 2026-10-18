@@ -29,6 +29,10 @@ public class UserRepository : IUserRepository
     public Task<User?> GetByIdAsync(int id, CancellationToken cancellationToken) =>
         _context.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
 
+    /// <summary>Read-only load for <c>GET /api/users/me</c> (spec §20).</summary>
+    public Task<User?> GetByIdNoTrackingAsync(int id, CancellationToken cancellationToken) =>
+        _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+
     /// <summary>Read-only load for the login path (spec §20, §34).</summary>
     public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken) =>
         _context.Users

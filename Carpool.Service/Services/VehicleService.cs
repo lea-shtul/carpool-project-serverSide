@@ -45,7 +45,7 @@ public class VehicleService : IVehicleService
 
     public async Task<VehicleResponse> GetByIdAsync(int vehicleId, int currentUserId, UserRole currentUserRole, CancellationToken cancellationToken)
     {
-        var vehicle = await _vehicleRepository.GetByIdAsync(vehicleId, cancellationToken)
+        var vehicle = await _vehicleRepository.GetByIdNoTrackingAsync(vehicleId, cancellationToken)
             ?? throw new NotFoundException($"Vehicle {vehicleId} was not found.");
 
         EnsureOwnerOrAdmin(vehicle, currentUserId, currentUserRole);

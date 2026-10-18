@@ -31,6 +31,10 @@ public class BookingRepository : IBookingRepository
             .Include(b => b.Ride)
             .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
 
+    /// <summary>Read-only load for <c>GET /api/bookings/{id}</c> (spec §20).</summary>
+    public Task<Booking?> GetByIdNoTrackingAsync(int id, CancellationToken cancellationToken) =>
+        _context.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
+
     /// <summary>Read-only listing backing <c>GET /api/bookings/my</c> (spec §20).</summary>
     public async Task<IEnumerable<Booking>> GetByPassengerAsync(int passengerId, CancellationToken cancellationToken) =>
         await _context.Bookings

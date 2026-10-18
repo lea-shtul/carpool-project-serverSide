@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Carpool.API.BackgroundServices;
 using Carpool.API.Middleware;
 using Carpool.API.Swagger;
+using Microsoft.AspNetCore.Mvc;
 using Carpool.Core.Configuration;
 using Carpool.Core.Entities;
 using Carpool.Core.Interfaces.Repositories;
@@ -45,6 +46,23 @@ try
         .AddControllers()
         .AddJsonOptions(options =>
             options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+    // Model-validation failures ([Required], [Range], [AllowedValues], …) go through the
+    // same ErrorResponse shape as every other error (spec §54), not the framework's default
+    // ProblemDetails — the field errors are folded into one message string.
+    builder.Services.Configure<ApiBehaviorOptions>(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var correlationId = context.HttpContext.GetCorrelationId();
+            var message = string.Join(
+                " ",
+                context.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
+
+            return new BadRequestObjectResult(
+                new ErrorResponse(StatusCodes.Status400BadRequest, message, correlationId));
+        };
+    });
 
     // Swagger / OpenAPI (spec §61). Every endpoint is documented (XML comments), the common
     // error responses are added by an operation filter, and a Bearer scheme lets protected
@@ -232,12 +250,6 @@ app.UseCors("Client");
     app.UseAuthorization();
 
     app.MapControllers();
-
-    // Serve the built React app (copied into wwwroot by the Docker build) and let client-side
-    // routing own every path that isn't an API route or a real static file, so a hard refresh
-    // on e.g. /rides/3 still resolves to index.html instead of a 404 (spec extension — see
-    // the Dockerfile).
-    
 
     app.Run();
 }

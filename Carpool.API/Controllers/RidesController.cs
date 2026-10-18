@@ -1,4 +1,6 @@
 using Carpool.Core.Dtos.Rides;
+using Carpool.Core.Enums;
+using Carpool.Core.Exceptions;
 using Carpool.Core.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -7,8 +9,9 @@ namespace Carpool.API.Controllers;
 
 /// <summary>
 /// Ride creation, search and state transitions (spec §12–§20). There is deliberately no
-/// <c>PUT</c> — a ride cannot be edited after creation (spec §13). Cancel/complete are
-/// driver-or-Admin actions enforced in <see cref="IRideService"/>.
+/// <c>PUT</c> — a ride cannot be edited after creation (spec §13). The only state transitions
+/// are a driver-or-Admin <c>PATCH /api/rides/{id}</c> (Cancel/Complete), enforced in
+/// <see cref="IRideService"/>.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -53,23 +56,23 @@ public class RidesController : ApiControllerBase
         return Ok(ride);
     }
 
-    /// <summary>PATCH /api/rides/{id}/cancel — cancel a scheduled ride (driver or Admin); active bookings are cancelled too.</summary>
-    [HttpPatch("{id:int}/cancel")]
-    public async Task<ActionResult<RideResponse>> Cancel(
+    /// <summary>
+    /// PATCH /api/rides/{id} — the only two manual state transitions (driver or Admin):
+    /// <c>{"status":"Cancelled"}</c> cancels a scheduled ride (active bookings are cancelled
+    /// too), <c>{"status":"Completed"}</c> completes it (active bookings are completed too).
+    /// </summary>
+    [HttpPatch("{id:int}")]
+    public async Task<ActionResult<RideResponse>> UpdateStatus(
         [FromRoute] int id,
+        [FromBody] UpdateRideStatusRequest request,
         CancellationToken cancellationToken)
     {
-        var ride = await _rideService.CancelAsync(id, CurrentUserId, CurrentUserRole, cancellationToken);
-        return Ok(ride);
-    }
-
-    /// <summary>PATCH /api/rides/{id}/complete — complete a ride (driver or Admin); active bookings are completed too.</summary>
-    [HttpPatch("{id:int}/complete")]
-    public async Task<ActionResult<RideResponse>> Complete(
-        [FromRoute] int id,
-        CancellationToken cancellationToken)
-    {
-        var ride = await _rideService.CompleteAsync(id, CurrentUserId, CurrentUserRole, cancellationToken);
+        var ride = request.Status switch
+        {
+            RideStatus.Cancelled => await _rideService.CancelAsync(id, CurrentUserId, CurrentUserRole, cancellationToken),
+            RideStatus.Completed => await _rideService.CompleteAsync(id, CurrentUserId, CurrentUserRole, cancellationToken),
+            _ => throw new BusinessRuleException("Unsupported status transition."),
+        };
         return Ok(ride);
     }
 }

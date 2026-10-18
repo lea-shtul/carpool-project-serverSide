@@ -67,13 +67,16 @@ public class BookingsController : ApiControllerBase
         return Ok(booking);
     }
 
-    /// <summary>PATCH /api/bookings/{id}/cancel — cancel your own active booking; seats are returned to the ride.</summary>
-    [HttpPatch("bookings/{id:int}/cancel")]
-    public async Task<ActionResult<BookingResponse>> Cancel(
+    /// <summary>
+    /// DELETE /api/bookings/{id} — cancel your own active booking (soft delete: the row
+    /// stays, with status Cancelled); seats are returned to the ride.
+    /// </summary>
+    [HttpDelete("bookings/{id:int}")]
+    public async Task<IActionResult> Cancel(
         [FromRoute] int id,
         CancellationToken cancellationToken)
     {
-        var booking = await _bookingService.CancelAsync(id, CurrentUserId, cancellationToken);
-        return Ok(booking);
+        await _bookingService.CancelAsync(id, CurrentUserId, cancellationToken);
+        return NoContent();
     }
 }

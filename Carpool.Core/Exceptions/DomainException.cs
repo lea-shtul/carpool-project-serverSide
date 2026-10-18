@@ -66,7 +66,8 @@ public class ConflictException : DomainException
 /// </summary>
 public sealed class ConcurrencyConflictException : ConflictException
 {
-    public ConcurrencyConflictException(string message = "The resource was modified by another request. Please retry.")
+    public ConcurrencyConflictException(
+        string message = "This ride was just changed by someone else — for example, a seat was booked or its status changed. Please refresh and try again.")
         : base(message)
     {
     }

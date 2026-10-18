@@ -25,13 +25,14 @@ public class RatingsController : ApiControllerBase
 
     /// <summary>POST /api/rides/{rideId}/ratings — rate the driver of a completed ride you had a completed booking on.</summary>
     [HttpPost("rides/{rideId:int}/ratings")]
+    [ProducesResponseType<RatingResponse>(StatusCodes.Status201Created)]
     public async Task<ActionResult<RatingResponse>> Create(
         [FromRoute] int rideId,
         [FromBody] CreateRatingRequest request,
         CancellationToken cancellationToken)
     {
         var rating = await _ratingService.CreateAsync(rideId, CurrentUserId, request, cancellationToken);
-        return Ok(rating);
+        return CreatedAtAction(nameof(GetForUser), new { userId = rating.DriverId }, rating);
     }
 
     /// <summary>GET /api/users/{userId}/ratings — ratings that user received as a driver.</summary>

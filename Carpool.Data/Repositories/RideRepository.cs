@@ -41,6 +41,12 @@ public class RideRepository : IRideRepository
                 .ThenInclude(rt => rt.Tag)
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
+    /// <summary>Read-only load, no includes — ownership/existence checks that don't modify the ride.</summary>
+    public Task<Ride?> GetByIdNoTrackingAsync(int id, CancellationToken cancellationToken) =>
+        _context.Rides
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+
     /// <summary>
     /// Filtered, sorted, database-paged search for <c>GET /api/rides</c> (spec §20, §65).
     /// The total count is taken before paging so the caller can build paging metadata.

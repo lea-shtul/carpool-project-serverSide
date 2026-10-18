@@ -27,8 +27,11 @@ public class VehicleServiceTests
 
     private VehicleService CreateSut() => new(_vehicles.Object, _unitOfWork.Object, _mapper);
 
-    private void VehicleExists(Vehicle vehicle) =>
+    private void VehicleExists(Vehicle vehicle)
+    {
         _vehicles.Setup(v => v.GetByIdAsync(vehicle.Id, It.IsAny<CancellationToken>())).ReturnsAsync(vehicle);
+        _vehicles.Setup(v => v.GetByIdNoTrackingAsync(vehicle.Id, It.IsAny<CancellationToken>())).ReturnsAsync(vehicle);
+    }
 
     private static CreateVehicleRequest CreateRequest(string plate = "NEW-1") => new()
     {
@@ -73,7 +76,7 @@ public class VehicleServiceTests
     [Fact]
     public async Task GetByIdAsync_WhenNotFound_ThrowsNotFound()
     {
-        _vehicles.Setup(v => v.GetByIdAsync(VehicleId, It.IsAny<CancellationToken>())).ReturnsAsync((Vehicle?)null);
+        _vehicles.Setup(v => v.GetByIdNoTrackingAsync(VehicleId, It.IsAny<CancellationToken>())).ReturnsAsync((Vehicle?)null);
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
             CreateSut().GetByIdAsync(VehicleId, Owner, UserRole.User, default));

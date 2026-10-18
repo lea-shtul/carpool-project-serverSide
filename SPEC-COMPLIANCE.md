@@ -19,11 +19,11 @@ that satisfy it. Paths are relative to the solution root.
 | Item | Where |
 | --- | --- |
 | Plural resource names | `/api/users`, `/api/vehicles`, `/api/rides`, `/api/bookings`, `/api/ratings`, `/api/tags` |
-| Correct HTTP methods | `GET` reads, `POST` create, `PUT` vehicle update, `PATCH` state transitions (`/cancel`, `/complete`, `/status`), `DELETE` vehicle. No `PUT /api/rides/{id}` (§13). |
+| Correct HTTP methods | `GET` reads, `POST` create, `PUT` vehicle update, `PATCH` state transitions (ride `status`, user `status`), `DELETE` vehicle / booking (soft). No action verbs in the URL — no `/cancel`, `/complete` (§13, §67). |
 | 200 | every `GET` and the `PATCH` transitions |
-| 201 + Location | `VehiclesController.Create`, `RidesController.Create`, `BookingsController.Create` — `CreatedAtAction(nameof(GetById), …)` |
-| 204 | `VehiclesController.Delete` → `NoContent()` |
-| 400 | `[ApiController]` model validation + `BusinessRuleException` → `ExceptionHandlingMiddleware` |
+| 201 + Location | `VehiclesController.Create`, `RidesController.Create`, `BookingsController.Create` (→ `GetById`); `AuthController.Register` (→ `UsersController.GetMe`); `RatingsController.Create` (→ `GetForUser`); `TagsController.Create` (→ `GetAll`) — all via `CreatedAtAction` |
+| 204 | `VehiclesController.Delete`, `BookingsController.Cancel` → `NoContent()` |
+| 400 | `[ApiController]` model validation → `ApiBehaviorOptions.InvalidModelStateResponseFactory` (`Program.cs`, same `ErrorResponse` shape); `BusinessRuleException` → `ExceptionHandlingMiddleware` |
 | 401 | JWT bearer challenge + `UnauthorizedException` |
 | 403 | `ForbiddenException` (ownership checks in services) |
 | 404 | `NotFoundException` |
@@ -43,7 +43,7 @@ that satisfy it. Paths are relative to the solution root.
 | Item | Where |
 | --- | --- |
 | Data Annotations | `Carpool.Core/DTOs/**` — `[Required]`, `[EmailAddress]`, `[Range]`, `[StringLength]`, `[Phone]` |
-| ModelState | `[ApiController]` auto-400 with `ValidationProblemDetails` |
+| ModelState | `[ApiController]` auto-400, re-shaped to the API's own `ErrorResponse` by `ApiBehaviorOptions.InvalidModelStateResponseFactory` (`Program.cs`) instead of the default `ValidationProblemDetails` |
 | Business validation in Service | all rules (ownership, seats, state transitions, rating eligibility) live in `Carpool.Service/Services/*`; controllers contain none |
 
 ## Database
@@ -148,7 +148,7 @@ that satisfy it. Paths are relative to the solution root.
 | Ride cancellation cancels active bookings | `RideService.CancelAsync` — ride `Cancelled` + each active booking `Cancelled` in one transaction |
 | Ride completion completes active bookings | `RideService.CompleteAsync` + `RideStatusService.CompleteDueRidesAsync` — ride `Completed` + each active booking `Completed` in one transaction |
 | Automatic status transitions | `Carpool.API/BackgroundServices/RideStatusBackgroundService.cs` + `Carpool.Service/Services/RideStatusService.cs` |
-| Manual completion | `RidesController.Complete` → `RideService.CompleteAsync` (driver-or-Admin, eligibility, transaction) |
+| Manual completion | `RidesController.UpdateStatus` (`{"status":"Completed"}`) → `RideService.CompleteAsync` (driver-or-Admin, eligibility, transaction) |
 | Rating only after completed booking | `RatingService.CreateAsync` — ride `Completed` + reviewer has a `Completed` booking |
 | One rating per ride/reviewer | `RatingService.CreateAsync` — `ExistsForReviewerAsync` → 409; unique index `Rating(RideId, ReviewerId)` |
 | Vehicle deletion protection | `VehicleService.DeleteAsync` — `IsReferencedByAnyRideAsync` → 409, any ride status |

@@ -10,6 +10,39 @@ go negative.
 
 ---
 
+## The limited resource — seats on a ride
+
+**The resource.** Every ride has a fixed number of seats (`Ride.AvailableSeats`). When the
+last seat is taken, nobody else may book it.
+
+**Where the contention happens.** Two passengers call `POST /api/rides/{rideId}/bookings`
+on the same ride at the same moment, and both see that one seat is still free. Without
+protection, both requests would pass the check, both would save, and the ride would end up
+with more passengers than seats. Cancelling a booking (which returns seats to the ride) and
+cancelling or completing the ride itself update the same row, so they compete too.
+
+**How it is protected.** `Ride` uses optimistic concurrency with PostgreSQL's `xmin` system
+column as its concurrency token (`RideConfiguration`). Inside a single transaction,
+`BookingService` loads the ride, runs every business check that depends on its current
+state (status, departure time, free seats, duplicate booking), decreases `AvailableSeats`
+and saves. EF Core adds the original `xmin` to the `UPDATE … WHERE` clause, so if another
+request changed the ride in the meantime, no row matches and EF Core throws
+`DbUpdateConcurrencyException`.
+
+**How the system responds.** `CarpoolUnitOfWork` catches that specific exception and turns
+it into a `ConcurrencyConflictException`. The exception middleware returns **409 Conflict**
+with a clear JSON message, and the event is logged at `Warning` level with its correlation
+id. The first request succeeds; the second gets 409 and the client tells the user the seat
+was just taken and to try again. Two database rules add a second line of defence: a check
+constraint keeps `AvailableSeats` between 0 and `TotalSeats`, and a filtered unique index
+allows only one active booking per passenger per ride.
+
+**Proof.** `Carpool.Tests/Concurrency/RideSeatConcurrencyTests.cs` opens two separate
+`DbContext` instances on the same ride: both change the seats, the first save succeeds and
+the second throws `DbUpdateConcurrencyException` (requires a local PostgreSQL).
+
+---
+
 ## Documentation
 
 | Document | What |
@@ -177,8 +210,8 @@ and act on any vehicle/ride.
 | Auth | `POST /api/auth/register`, `POST /api/auth/login` |
 | Users | `GET /api/users/me`; `GET /api/users`, `PATCH /api/users/{id}/status` *(Admin)* |
 | Vehicles | `POST /api/vehicles`, `GET /api/vehicles/my`, `GET /api/vehicles/{id}`, `PUT /api/vehicles/{id}`, `DELETE /api/vehicles/{id}` |
-| Rides | `POST /api/rides`, `GET /api/rides` *(filter/sort/page)*, `GET /api/rides/{id}`, `PATCH /api/rides/{id}/cancel`, `PATCH /api/rides/{id}/complete` |
-| Bookings | `POST /api/rides/{rideId}/bookings`, `GET /api/bookings/my`, `GET /api/bookings/{id}`, `PATCH /api/bookings/{id}/cancel` |
+| Rides | `POST /api/rides`, `GET /api/rides` *(filter/sort/page)*, `GET /api/rides/{id}`, `PATCH /api/rides/{id}` *(`{"status":"Cancelled"\|"Completed"}`)* |
+| Bookings | `POST /api/rides/{rideId}/bookings`, `GET /api/bookings/my`, `GET /api/bookings/{id}`, `DELETE /api/bookings/{id}` *(soft cancel)* |
 | Ratings | `POST /api/rides/{rideId}/ratings`, `GET /api/users/{userId}/ratings` |
 | Tags | `GET /api/tags`, `POST /api/tags` |
 

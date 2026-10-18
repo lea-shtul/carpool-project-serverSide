@@ -25,6 +25,10 @@ public class VehicleRepository : IVehicleRepository
     public Task<Vehicle?> GetByIdAsync(int id, CancellationToken cancellationToken) =>
         _context.Vehicles.FirstOrDefaultAsync(v => v.Id == id, cancellationToken);
 
+    /// <summary>Read-only load for <c>GET /api/vehicles/{id}</c> (spec §20).</summary>
+    public Task<Vehicle?> GetByIdNoTrackingAsync(int id, CancellationToken cancellationToken) =>
+        _context.Vehicles.AsNoTracking().FirstOrDefaultAsync(v => v.Id == id, cancellationToken);
+
     /// <summary>Read-only load backing <c>GET /api/vehicles/my</c> (spec §9, §20).</summary>
     public async Task<IEnumerable<Vehicle>> GetByOwnerAsync(int ownerId, CancellationToken cancellationToken) =>
         await _context.Vehicles

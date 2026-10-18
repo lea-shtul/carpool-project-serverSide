@@ -47,47 +47,53 @@ public class BookingService : IBookingService
             throw new BusinessRuleException("NumberOfSeats must be greater than zero.");
         }
 
-        var ride = await _rideRepository.GetByIdAsync(rideId, cancellationToken)
-            ?? throw new NotFoundException($"Ride {rideId} was not found.");
-
-        // Ride must be bookable: Scheduled, not departed, not cancelled (spec §22).
-        if (ride.Status != RideStatus.Scheduled)
-        {
-            throw new BusinessRuleException("This ride is not open for booking.");
-        }
-
-        if (ride.DepartureTime <= DateTime.UtcNow)
-        {
-            throw new BusinessRuleException("The ride has already departed.");
-        }
-
-        if (ride.DriverId == currentUserId)
-        {
-            throw new BusinessRuleException("You cannot book your own ride.");
-        }
-
-        // At most one Active booking per (ride, passenger) — also enforced by a filtered
-        // unique index (spec §26).
-        if (await _bookingRepository.HasActiveBookingAsync(rideId, currentUserId, cancellationToken))
-        {
-            throw new ConflictException("You already have an active booking for this ride.");
-        }
-
-        if (ride.AvailableSeats < request.NumberOfSeats)
-        {
-            throw new BusinessRuleException("Not enough available seats on this ride.");
-        }
-
-        var booking = _mapper.Map<Booking>(request);
-        booking.RideId = rideId;
-        booking.PassengerId = currentUserId;
-        booking.Status = BookingStatus.Active;
-        booking.CreatedAt = DateTime.UtcNow;
+        // Everything below runs inside ONE transaction: the read of the ride, every business
+        // check that depends on its current state (status, seats, duplicate booking) and the
+        // save. A check made before the transaction opened could already be stale by the time
+        // we save. The ride is loaded tracked, so the UPDATE carries `WHERE xmin = <original>`;
+        // if another request changed the ride in between, 0 rows match →
+        // DbUpdateConcurrencyException → ConcurrencyConflictException → 409.
+        Booking booking = null!;
 
         await _unitOfWork.ExecuteInTransactionAsync(async token =>
         {
-            // Tracked ride: this UPDATE carries `WHERE xmin = <original>`. If another
-            // request booked first, 0 rows match → DbUpdateConcurrencyException → 409.
+            var ride = await _rideRepository.GetByIdAsync(rideId, token)
+                ?? throw new NotFoundException($"Ride {rideId} was not found.");
+
+            // Ride must be bookable: Scheduled, not departed, not cancelled (spec §22).
+            if (ride.Status != RideStatus.Scheduled)
+            {
+                throw new BusinessRuleException("This ride is not open for booking.");
+            }
+
+            if (ride.DepartureTime <= DateTime.UtcNow)
+            {
+                throw new BusinessRuleException("The ride has already departed.");
+            }
+
+            if (ride.DriverId == currentUserId)
+            {
+                throw new BusinessRuleException("You cannot book your own ride.");
+            }
+
+            // At most one Active booking per (ride, passenger) — also enforced by a filtered
+            // unique index (spec §26).
+            if (await _bookingRepository.HasActiveBookingAsync(rideId, currentUserId, token))
+            {
+                throw new ConflictException("You already have an active booking for this ride.");
+            }
+
+            if (ride.AvailableSeats < request.NumberOfSeats)
+            {
+                throw new BusinessRuleException("Not enough available seats on this ride.");
+            }
+
+            booking = _mapper.Map<Booking>(request);
+            booking.RideId = rideId;
+            booking.PassengerId = currentUserId;
+            booking.Status = BookingStatus.Active;
+            booking.CreatedAt = DateTime.UtcNow;
+
             ride.AvailableSeats -= request.NumberOfSeats;
             await _bookingRepository.AddAsync(booking, token);
             await _unitOfWork.SaveChangesAsync(token);
@@ -108,7 +114,7 @@ public class BookingService : IBookingService
         UserRole currentUserRole,
         CancellationToken cancellationToken)
     {
-        var booking = await _bookingRepository.GetByIdAsync(bookingId, cancellationToken)
+        var booking = await _bookingRepository.GetByIdNoTrackingAsync(bookingId, cancellationToken)
             ?? throw new NotFoundException($"Booking {bookingId} was not found.");
 
         if (booking.PassengerId != currentUserId && currentUserRole != UserRole.Admin)
@@ -122,7 +128,7 @@ public class BookingService : IBookingService
     public async Task<IEnumerable<RideBookingResponse>> GetForRideAsync(
         int rideId, int currentUserId, UserRole currentUserRole, CancellationToken cancellationToken)
     {
-        var ride = await _rideRepository.GetByIdAsync(rideId, cancellationToken)
+        var ride = await _rideRepository.GetByIdNoTrackingAsync(rideId, cancellationToken)
             ?? throw new NotFoundException($"Ride {rideId} was not found.");
 
         // Only the ride's own driver may see who booked it — no passenger, and no other
@@ -138,23 +144,26 @@ public class BookingService : IBookingService
 
     public async Task<BookingResponse> CancelAsync(int bookingId, int currentUserId, CancellationToken cancellationToken)
     {
-        var booking = await _bookingRepository.GetByIdAsync(bookingId, cancellationToken)
-            ?? throw new NotFoundException($"Booking {bookingId} was not found.");
-
-        // Only the booking's own passenger may cancel it — no Admin bypass (spec §25).
-        if (booking.PassengerId != currentUserId)
-        {
-            throw new ForbiddenException("You can only cancel your own booking.");
-        }
-
-        // Allowed only while the booking is Active and the ride is still Scheduled (spec §25).
-        if (booking.Status != BookingStatus.Active || booking.Ride.Status != RideStatus.Scheduled)
-        {
-            throw new BusinessRuleException("This booking can no longer be cancelled.");
-        }
+        // Read, checks and save in ONE transaction (see CreateAsync).
+        Booking booking = null!;
 
         await _unitOfWork.ExecuteInTransactionAsync(async token =>
         {
+            booking = await _bookingRepository.GetByIdAsync(bookingId, token)
+                ?? throw new NotFoundException($"Booking {bookingId} was not found.");
+
+            // Only the booking's own passenger may cancel it — no Admin bypass (spec §25).
+            if (booking.PassengerId != currentUserId)
+            {
+                throw new ForbiddenException("You can only cancel your own booking.");
+            }
+
+            // Allowed only while the booking is Active and the ride is still Scheduled (spec §25).
+            if (booking.Status != BookingStatus.Active || booking.Ride.Status != RideStatus.Scheduled)
+            {
+                throw new BusinessRuleException("This booking can no longer be cancelled.");
+            }
+
             booking.Status = BookingStatus.Cancelled;
             booking.CancelledAt = DateTime.UtcNow;
 

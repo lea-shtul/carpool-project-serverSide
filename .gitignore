@@ -8,7 +8,6 @@ obj/
 *.user
 
 # Secrets & environment-specific config
-appsettings.Development.json
 appsettings.*.Local.json
 secrets.json
 *.secrets

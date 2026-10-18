@@ -29,8 +29,11 @@ public class BookingServiceTests
 
     private BookingService CreateSut() => new(_bookings.Object, _rides.Object, _unitOfWork.Object, _mapper);
 
-    private void RideExists(Ride ride) =>
+    private void RideExists(Ride ride)
+    {
         _rides.Setup(r => r.GetByIdAsync(ride.Id, It.IsAny<CancellationToken>())).ReturnsAsync(ride);
+        _rides.Setup(r => r.GetByIdNoTrackingAsync(ride.Id, It.IsAny<CancellationToken>())).ReturnsAsync(ride);
+    }
 
     // --- CreateAsync -------------------------------------------------------------------
 
@@ -198,7 +201,7 @@ public class BookingServiceTests
     public async Task GetByIdAsync_WhenNeitherOwnerNorAdmin_ThrowsForbidden()
     {
         var booking = TestData.Booking(7, RideId, Passenger);
-        _bookings.Setup(b => b.GetByIdAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(booking);
+        _bookings.Setup(b => b.GetByIdNoTrackingAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(booking);
 
         await Assert.ThrowsAsync<ForbiddenException>(() =>
             CreateSut().GetByIdAsync(7, currentUserId: 999, UserRole.User, default));
@@ -208,7 +211,7 @@ public class BookingServiceTests
     public async Task GetByIdAsync_AsAdmin_ReturnsBookingOfAnotherUser()
     {
         var booking = TestData.Booking(7, RideId, Passenger);
-        _bookings.Setup(b => b.GetByIdAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(booking);
+        _bookings.Setup(b => b.GetByIdNoTrackingAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(booking);
 
         var result = await CreateSut().GetByIdAsync(7, currentUserId: 999, UserRole.Admin, default);
 

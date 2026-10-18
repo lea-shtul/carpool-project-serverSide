@@ -33,7 +33,7 @@ Request bodies below are ready to paste. Two seeded accounts are used:
 
 | Step | Call | Body | Expect |
 | --- | --- | --- | --- |
-| 2.1 | `POST /api/auth/register` | see below | **200** — `role: "User"`, `isActive: true`, no `passwordHash` field |
+| 2.1 | `POST /api/auth/register` | see below | **201** + `Location: /api/users/me` — `role: "User"`, `isActive: true`, no `passwordHash` field |
 | 2.2 | `POST /api/auth/register` again, same email | same | **409** — email already registered |
 | 2.3 | `POST /api/auth/login` | `{ "email": "walk@carpool.test", "password": "Passw0rd!1" }` | **200** — `accessToken`, `expiresAtUtc`, `user` |
 | 2.4 | `POST /api/auth/login` wrong password | `{ "email": "walk@carpool.test", "password": "nope" }` | **401** — "Invalid email or password." |
@@ -103,8 +103,8 @@ Recreate a vehicle first (4.1) and note its `id` as `{vehicleId}`.
 | 5.4 | `GET /api/rides?sortBy=price&sortDirection=desc&pageSize=5` | | **200** — `{ items, page, pageSize, totalCount, totalPages }`, your ride included |
 | 5.5 | `GET /api/rides?origin=tel&availableOnly=true` | | **200** — case-insensitive partial match |
 | 5.6 | `GET /api/rides/{yourRideId}` | | **200** — full driver/vehicle/tags projection |
-| 5.7 | `PATCH /api/rides/{yourRideId}/cancel` | | **200** — `status: "Cancelled"` |
-| 5.8 | `PATCH /api/rides/{yourRideId}/complete` (now Cancelled) | | **400** — cannot complete a cancelled ride |
+| 5.7 | `PATCH /api/rides/{yourRideId}` | `{ "status": "Cancelled" }` | **200** — `status: "Cancelled"` |
+| 5.8 | `PATCH /api/rides/{yourRideId}` (now Cancelled) | `{ "status": "Completed" }` | **400** — cannot complete a cancelled ride |
 
 ```json
 // 5.1  — {vehicleId} from your recreated vehicle
@@ -134,7 +134,7 @@ Book **alice's seeded ride #1** (Tel Aviv → Jerusalem, 3 seats) — you are no
 | 6.4 | `POST /api/rides/1/bookings` again | `{ "numberOfSeats": 1 }` | **409** — one active booking per ride |
 | 6.5 | `GET /api/bookings/my` | | **200** — your one Active booking |
 | 6.6 | `GET /api/bookings/{id}` | | **200** (owner) |
-| 6.7 | `PATCH /api/bookings/{id}/cancel` | | **200** — `status: "Cancelled"`, `cancelledAt` set |
+| 6.7 | `DELETE /api/bookings/{id}` | | **204** — booking row kept, `status: "Cancelled"`, `cancelledAt` set |
 | 6.8 | `GET /api/rides/1` | | `availableSeats` back to **3** |
 | 6.9 | Log in as **alice**, `POST /api/rides/1/bookings` | `{ "numberOfSeats": 1 }` | **400** — the driver cannot book their own ride |
 
@@ -149,11 +149,11 @@ Ratings need a **Completed** ride with a **Completed** booking by the reviewer �
 seeded data has none, so this section is best verified by the automated
 `RatingServiceTests`. To see it end to end manually you would: create a ride departing a
 minute ago with a short duration, book it as another user, wait for the background service
-to complete it (or `PATCH .../complete` as the driver), then:
+to complete it (or `PATCH /api/rides/{id}` with `{ "status": "Completed" }` as the driver), then:
 
 | Step | Call | Body | Expect |
 | --- | --- | --- | --- |
-| 7.1 | `POST /api/rides/{completedRideId}/ratings` (as the passenger) | `{ "score": 5, "comment": "Great ride" }` | **200** |
+| 7.1 | `POST /api/rides/{completedRideId}/ratings` (as the passenger) | `{ "score": 5, "comment": "Great ride" }` | **201** + `Location: /api/users/{driverId}/ratings` |
 | 7.2 | same again | | **409** — one rating per ride per reviewer |
 | 7.3 | `POST /api/rides/{id}/ratings` as the **driver** | | **400** — cannot rate your own ride |
 | 7.4 | `GET /api/users/{driverId}/ratings` | | **200** — the rating |

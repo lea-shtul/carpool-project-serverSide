@@ -34,11 +34,12 @@ public class TagsController : ApiControllerBase
 
     /// <summary>POST /api/tags — create a private tag owned by the authenticated caller.</summary>
     [HttpPost]
+    [ProducesResponseType<TagResponse>(StatusCodes.Status201Created)]
     public async Task<ActionResult<TagResponse>> Create(
         [FromBody] CreateTagRequest request,
         CancellationToken cancellationToken)
     {
         var tag = await _tagService.CreateAsync(CurrentUserId, request, cancellationToken);
-        return Ok(tag);
+        return CreatedAtAction(nameof(GetAll), null, tag);
     }
 }

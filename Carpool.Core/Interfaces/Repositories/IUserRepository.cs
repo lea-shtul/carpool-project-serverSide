@@ -10,6 +10,9 @@ public interface IUserRepository
 {
     Task<User?> GetByIdAsync(int id, CancellationToken cancellationToken);
 
+    /// <summary>Read-only load (<c>AsNoTracking</c>) for <c>GET /api/users/me</c> (spec §20).</summary>
+    Task<User?> GetByIdNoTrackingAsync(int id, CancellationToken cancellationToken);
+
     Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken);
 
     Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken);

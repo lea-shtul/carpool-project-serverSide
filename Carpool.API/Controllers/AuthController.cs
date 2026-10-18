@@ -26,12 +26,13 @@ public class AuthController : ApiControllerBase
 
     /// <summary>POST /api/auth/register — create a new user account (role is always <c>User</c>). Anonymous.</summary>
     [HttpPost("register")]
+    [ProducesResponseType<UserResponse>(StatusCodes.Status201Created)]
     public async Task<ActionResult<UserResponse>> Register(
         [FromBody] RegisterRequest request,
         CancellationToken cancellationToken)
     {
         var user = await _authService.RegisterAsync(request, cancellationToken);
-        return Ok(user);
+        return CreatedAtAction(nameof(UsersController.GetMe), "Users", null, user);
     }
 
     /// <summary>POST /api/auth/login — verify credentials and return a signed JWT plus the user profile. Anonymous.</summary>

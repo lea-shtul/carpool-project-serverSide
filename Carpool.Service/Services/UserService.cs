@@ -28,7 +28,7 @@ public class UserService : IUserService
 
     public async Task<UserResponse> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
-        var user = await _userRepository.GetByIdAsync(id, cancellationToken)
+        var user = await _userRepository.GetByIdNoTrackingAsync(id, cancellationToken)
             ?? throw new NotFoundException($"User {id} was not found.");
 
         return _mapper.Map<UserResponse>(user);

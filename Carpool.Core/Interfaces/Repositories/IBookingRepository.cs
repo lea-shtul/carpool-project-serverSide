@@ -8,6 +8,9 @@ public interface IBookingRepository
     /// <summary>Tracked load including the parent <c>Ride</c>, for the cancel flow (spec §25).</summary>
     Task<Booking?> GetByIdAsync(int id, CancellationToken cancellationToken);
 
+    /// <summary>Read-only load (<c>AsNoTracking</c>) for <c>GET /api/bookings/{id}</c> (spec §20).</summary>
+    Task<Booking?> GetByIdNoTrackingAsync(int id, CancellationToken cancellationToken);
+
     Task<IEnumerable<Booking>> GetByPassengerAsync(int passengerId, CancellationToken cancellationToken);
 
     /// <summary>True if the passenger already has an Active booking on the ride (spec §26).</summary>
