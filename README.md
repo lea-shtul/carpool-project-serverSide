@@ -309,16 +309,20 @@ AutoMapper · xUnit + Moq · NLog · Swashbuckle (Swagger/OpenAPI) · `Backgroun
 > Not part of the assignment spec, which explicitly excludes Docker/cloud deploy — see
 > [`SPEC-COMPLIANCE.md`](SPEC-COMPLIANCE.md) → *Extensions beyond the base spec*.
 
-The root [`Dockerfile`](Dockerfile) builds the whole app — React client + API — into one
-image: a Node stage builds `carpool-client`, a .NET SDK stage publishes `Carpool.API`, and
-the final `aspnet:9.0` stage serves both from one process (the React build is copied into
-`wwwroot`). That means one container, one URL, one Render web service.
+The root [`Dockerfile`](Dockerfile) builds the **API only**: a .NET SDK stage publishes
+`Carpool.API`, and the final `aspnet:9.0` stage runs it directly — there is no Node stage
+and nothing is copied into `wwwroot`. The React client lives in its own separate repository
+([`carpool-project-clientSide`](https://github.com/lea-shtul/carpool-project-clientSide))
+and deploys as its own static site on Render, calling this API over HTTP(S). That means two
+services with two separate URLs, so the API must be told the client's origin via CORS
+(`Cors:AllowedOrigins`, see `Program.cs`).
 
 ```bash
 docker build -t carpool .
 docker run -p 8080:8080 \
   -e Jwt__Key="$(openssl rand -base64 64)" \
   -e DATABASE_URL="postgres://user:password@host:5432/dbname" \
+  -e Cors__AllowedOrigins="https://<your-client>.onrender.com" \
   carpool
 ```
 
